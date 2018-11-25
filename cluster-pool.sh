@@ -99,8 +99,7 @@ run_job(){
     elif [ ! -f $queuefile ]; then
         echo "Error: $queuefile not found!" >&2
     else
-        trap _term_worker SIGTERM SIGINT
-        IS_PARENT="" # Used to makesure SIGTERM only affects parent
+        #trap _term_worker SIGTERM SIGINT
         local runfile="$POOL_DIR/pools/$LOCAL_POOL/$BASHPID-$1.job"
         local logfile="$POOL_DIR/logs/$1.log"
         local endfile="$POOL_DIR/complete/$1.job"
@@ -119,12 +118,12 @@ run_job(){
 # Note, it is up to the job to capture SIGTERM
 kill_job(){
     local queuefile="$POOL_DIR/queued/$1.job"
-    local runfile="$POOL_DIR/pools/$LOCAL_POOL/$BASHPID-$1.job"
+    local runfile=$(ls "$POOL_DIR/pools/$LOCAL_POOL"|egrep -o "[0-9]+-$1\.job")
     local logfile="$POOL_DIR/logs/$1.log"
-    pid=$(echo $runfile|rev|cut -d'/' -f1|rev|cut -d'-' -f1)
-    echo "killing dieeee"
-    kill $pid
-    mv "$runfile" "$queuefile"
+    proc_id=$(echo $runfile|rev|cut -d'/' -f1|rev|cut -d'-' -f1)
+    echo killing $1 on $proc_id
+    kill $proc_id
+    mv "$POOL_DIR/pools/$LOCAL_POOL/$runfile" "$queuefile"
     rm $logfile
     unlock_job $1
 }
@@ -132,24 +131,20 @@ kill_job(){
 ###############################################################################
 # SIGTERM/SIGINT cleanup
 ###############################################################################
-_term_pool(){
-    if [ $IS_PARENT ]; then
-        # This is the pool process
+_term(){
+    if [ $BASHPID = $$ ]; then 
+        echo "Hello from termpool $BASHPID"
+        echo $(ps aux|grep cluster)
         destroy_localpool
     else
-        # This is a worker process
+        echo "Hello from termworker $BASHPID, now killing $JPID"
         kill $JPID
     fi
+    echo "goodbye"
     exit 1
 }
 
-_term_worker(){
-    # This is a worker process
-    echo $JPID
-    kill $JPID
-}
-
-trap _term_pool SIGTERM SIGINT
+trap _term SIGTERM SIGINT
 
 ###############################################################################
 # Argument Parsing
@@ -160,7 +155,6 @@ if [[ $# -eq 1 ]]; then
     exit 1
 fi
 
-IS_PARENT=0
 
 ###############################################################################
 # Argument & Directory Checking
