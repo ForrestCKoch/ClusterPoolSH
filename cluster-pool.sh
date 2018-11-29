@@ -61,12 +61,18 @@ check_dir(){
             exit 1
         fi    
     done
+    for i in $(seq 1 $BATCHES); do
+        if [ ! -d "$WORKING_DIR/failed/$i" ]; then
+            echo "Error: $WORKING_DIR is an invalid directory">&2
+            exit 1
+        fi    
+    done
 }
 
 # setup $WORKING_DIR to be a valid working directory
 setup_directory(){
     mkdir -p "$WORKING_DIR/queued"
-    # Attempt to remove old baggage
+    # Attempt to remove old folders
     rmdir $WORKDING_DIR/queued/*/* 2>/dev/null
     rmdir $WORKDING_DIR/queued/* 2>/dev/null
     for i in $(seq 1 $NPRIORS); do 
@@ -75,6 +81,9 @@ setup_directory(){
         done
     done
     mkdir -p "$WORKING_DIR/failed"
+    for i in $(seq 1 $BATCHES); do
+        mkdir -p "$WORKING_DIR/failed/$i" 
+    done
     mkdir -p "$WORKING_DIR/locks"
     mkdir -p "$WORKING_DIR/pools"
     mkdir -p "$WORKING_DIR/complete"
@@ -97,7 +106,6 @@ setup_localpool(){
 destroy_localpool(){
     for job in $(ls $WORKING_DIR/pools/$LOCAL_POOL/*.job); do
         fname=$(echo $job|rev|cut -d'/' -f1|cut -d'.' -f2-|rev)
-        #echo killing $jid
         kill_job $fname
     done
     rmdir "$WORKING_DIR/pools/$LOCAL_POOL"
@@ -179,11 +187,11 @@ kill_job(){
 
     # degrade if necessary
     if [ $DEGRADE ]; then
-        batch=$(( batch - 1 ))
+        prior=$(( prior + 1 ))
     fi
 
     local queuefile="$WORKING_DIR/queued/$prior/$batch/$jname.job"
-    local failed="$WORKING_DIR/failed/$jname.job"
+    local failed="$WORKING_DIR/failed/$batch/$jname.job"
     local runfile="$1"
     local logfile="$WORKING_DIR/logs/$1.log"
     local proc_id=$(echo $1|cut -d'-' -f3)
@@ -191,8 +199,11 @@ kill_job(){
     kill $proc_id 2>/dev/null
 
     # Don't move back if we've exceeded our runtime
+    # Or if we've exceeded priorities/attempts
     STOP=$(( $(date +%s)/60 ))
     if [ $MAX_TIME ] && [ $(( START - STOP )) -gt $MAX_TIME ]; then
+        mv "$WORKING_DIR/pools/$LOCAL_POOL/$runfile" "$failed"
+    elif [ $prior -gt $NPRIORS ]; then
         mv "$WORKING_DIR/pools/$LOCAL_POOL/$runfile" "$failed"
     else 
         mv "$WORKING_DIR/pools/$LOCAL_POOL/$runfile" "$queuefile"
