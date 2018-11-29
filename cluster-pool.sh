@@ -1,6 +1,6 @@
 #!/bin/bash
 ###############################################################################
-# jobpool.sh
+# ClusterPool.sh
 # TODO: Insert description & author details
 ###############################################################################
 
@@ -8,41 +8,82 @@
 # Helper Functions
 ###############################################################################
 usage(){
-    echo "Usage: $0 PoolDirectory">&2
+    echo "Usage: $0 [Options] 
+    
+    Options:
+    -h|--help                       Show this help message
+    -i|--init                       Initialize working directory 
+    -w|--workdir [PATH]             Set working directory path (Default: pwd)
+    -b|--batches [N]                Set number of batches (Default: 1)
+    -p|--init-pool [NAME]           Initialize new pool with name [NAME]
+    -n|--max-workers [N]            Set poolsize (Default: 4)
+    -t|--max-time [N]               Don't schedule jobs exceeding this time 
+    -a|--add \"COMMAND\" [NAME]       Add command to queue *NEEDS \"s
+    -B|--set-batch                  Set the batch for command (Default: 1) 
+    -P|--priority [1-$NPRIORS]         Set priority of job (Default 4)
+    -d|--degrade [y/n]          Degrade priority after reschedule (Default: y)
+">&2
+    #-r|--reschedule [y/n]       Whether to reschedule jobs (Default: y)     
 }
 
-# check whether $POOL_DIR is valid
+# check whether $WORKING_DIR is valid
 check_dir(){
-    if [ ! -d "$POOL_DIR/queued" ]; then
-        echo "Error: $POOL_DIR is an invalid directory">&2
+    if [ ! -d "$WORKING_DIR/queued" ]; then
+        echo "Error: $WORKING_DIR is an invalid directory">&2
         exit 1
-    elif [ ! -d "$POOL_DIR/locks" ]; then
-        echo "Error: $POOL_DIR is an invalid directory">&2
+    elif [ ! -d "$WORKING_DIR/locks" ]; then
+        echo "Error: $WORKING_DIR is an invalid directory">&2
         exit 1
-    elif [ ! -d "$POOL_DIR/pools" ]; then
-        echo "Error: $POOL_DIR is an invalid directory">&2
+    elif [ ! -d "$WORKING_DIR/failed" ]; then
+        echo "Error: $WORKING_DIR is an invalid directory">&2
         exit 1
-    elif [ ! -d "$POOL_DIR/complete" ]; then
-        echo "Error: $POOL_DIR is an invalid directory">&2
+    elif [ ! -d "$WORKING_DIR/pools" ]; then
+        echo "Error: $WORKING_DIR is an invalid directory">&2
         exit 1
-    elif [ ! -d "$POOL_DIR/logs" ]; then
-        echo "Error: $POOL_DIR is an invalid directory">&2
+    elif [ ! -d "$WORKING_DIR/complete" ]; then
+        echo "Error: $WORKING_DIR is an invalid directory">&2
+        exit 1
+    elif [ ! -d "$WORKING_DIR/logs" ]; then
+        echo "Error: $WORKING_DIR is an invalid directory">&2
         exit 1
     fi
+    for i in $(seq 1 $NPRIORS); do
+        for j in $(seq 1 $BATCHES); do
+        if [ ! -d "$WORKING_DIR/queued/$i/$j" ]; then
+            echo "Error: $WORKING_DIR is an invalid directory">&2
+            exit 1
+        fi
+        done
+    done
+    for i in $(seq 1 $BATCHES); do
+        if [ ! -d "$WORKING_DIR/complete/$i" ]; then
+            echo "Error: $WORKING_DIR is an invalid directory">&2
+            exit 1
+        fi    
+    done
 }
 
-# setup $POOL_DIR to be a valid working directory
+# setup $WORKING_DIR to be a valid working directory
 setup_directory(){
-    mkdir -p "$POOL_DIR/queued"
-    mkdir -p "$POOL_DIR/locks"
-    mkdir -p "$POOL_DIR/pools"
-    mkdir -p "$POOL_DIR/complete"
-    mkdir -p "$POOL_DIR/logs"
+    mkdir -p "$WORKING_DIR/queued"
+    for i in $(seq 1 $NPRIORS); do 
+        for j in $(seq 1 $BATHCES); do
+            mkdir -p "$WORKING_DIR/queued/$i/$j"; 
+        done
+    done
+    mkdir -p "$WORKING_DIR/failed"
+    mkdir -p "$WORKING_DIR/locks"
+    mkdir -p "$WORKING_DIR/pools"
+    mkdir -p "$WORKING_DIR/complete"
+    for i in $(seq 1 $BATCHES); do
+        mkdir -p "$WORKING_DIR/complete/$i" 
+    done
+    mkdir -p "$WORKING_DIR/logs"
 }
 
 # setup a pool
 setup_localpool(){
-    if  mkdir "$POOL_DIR/pools/$1" ; then
+    if  mkdir "$WORKING_DIR/pools/$1" ; then
         LOCAL_POOL=$1
     else
         echo "Error: Couldn't create pool $1" >&2
@@ -51,50 +92,59 @@ setup_localpool(){
 
 # tear down our pool
 destroy_localpool(){
-    for job in $(ls $POOL_DIR/pools/$LOCAL_POOL/*.job); do
-        jid=$(echo $job|rev|cut -d'/' -f1|cut -d'.' -f2-|rev|cut -d'-' -f2-)
+    for job in $(ls $WORKING_DIR/pools/$LOCAL_POOL/*.job); do
+        fname=$(echo $job|rev|cut -d'/' -f1|cut -d'.' -f2-|rev)
         #echo killing $jid
-        kill_job $jid
+        kill_job $fname
     done
-    rmdir "$POOL_DIR/pools/$LOCAL_POOL"
+    rmdir "$WORKING_DIR/pools/$LOCAL_POOL"
 }
 
 get_poolsize(){
-    ls "$POOL_DIR/pools/$LOCAL_POOL"|wc -l
+    ls "$WORKING_DIR/pools/$LOCAL_POOL"|wc -l
 }
 
 # add command to queue
 # NOTE: It is the user's responsiblity to make sure each job
 #       is given a unique name.  Behaviour is otherwise undefined
+# $1 -- command
+# $2 -- job name
 add_command(){
-    local name="$1"
-    local command_string="$2"
-    echo "$command_string" > "$POOL_DIR/$name.job"
-}
-
-get_njobs(){
-    ls "$POOL_DIR/queued"|wc -l
+    local name="$2"
+    local command_string="$1"
+    echo "$command_string" > "$WORKING_DIR/$PRIORITY/$BAT/$name.job"
 }
 
 # return the next job to be run
 next_job(){
-    ls "$POOL_DIR/queued"|head -n1|rev|cut -d'/' -f1|cut -d'.' -f2-|rev
+    for p in $(seq 1 $NPRIORS); do
+        for b in $(seq 1 $BATCHES); do
+            local head_job=$(ls $WORKING_DIR/queued/$p/$b/*|head -n1 2>/dev/null)
+            if [ $head_job ]; then
+                echo $head_job|rev|cut -d'/' -f1-3|rev
+                return
+            fi
+        done
+    done
 }
 
 # attempt to lock the job --
 # remeber to check the return status!
 lock_job(){
-    mkdir "$POOL_DIR/locks/$1.lock" 2>/dev/null
+    mkdir "$WORKING_DIR/locks/$1.lock" 2>/dev/null
 }
 
 unlock_job(){
-    rmdir "$POOL_DIR/locks/$1.lock"
+    rmdir "$WORKING_DIR/locks/$1.lock"
 }
 
 # Move job from queue into pool and run
 # This function should only be called as a forked process
+# $1 -- job name
+# $2 -- batch
+# $3 -- priority
 run_job(){
-    local queuefile="$POOL_DIR/queued/$1.job"
+    local queuefile="$WORKING_DIR/queued/$3/$2/$1.job"
     if [ $BASHPID = $$ ]; then
         echo "Error: Parent processes can't run jobs!" >&2
     elif [ ! -f $queuefile ]; then
@@ -102,13 +152,14 @@ run_job(){
     else
         #trap _term_worker SIGTERM SIGINT
         trap _term SIGTERM SIGINT
-        local runfile="$POOL_DIR/pools/$LOCAL_POOL/$BASHPID-$1.job"
-        local logfile="$POOL_DIR/logs/$1.log"
-        local endfile="$POOL_DIR/complete/$1.job"
+        local runfile="$WORKING_DIR/pools/$LOCAL_POOL/$3-$2-$BASHPID-$1.job"
+        local logfile="$WORKING_DIR/logs/$1.log"
+        local endfile="$WORKING_DIR/complete/$2/$1.job"
         mv "$queuefile" "$runfile"
 
         # Start the job as a forked process, and record
         # the process in case we recieve a SIGTERM
+        START=$(( $(date +%s)/60 ))
         bash "$runfile" >> "$logfile" &
         JPID="$!"
         wait
@@ -119,14 +170,31 @@ run_job(){
 # Kill the indicated job and return it to the queue
 # Note, it is up to the job to capture SIGTERM
 kill_job(){
-    local queuefile="$POOL_DIR/queued/$1.job"
-    local runfile=$(ls "$POOL_DIR/pools/$LOCAL_POOL"|egrep -o "[0-9]+-$1\.job")
-    local logfile="$POOL_DIR/logs/$1.log"
-    proc_id=$(echo $runfile|rev|cut -d'/' -f1|rev|cut -d'-' -f1)
+    local jname=$(echo $1|cut -d'-' -f4-)
+    local batch=$(echo $1|cut -d'-' -f2)
+    local prior=$(echo $1|cut -d'-' -f1)
+
+    # degrade if necessary
+    if [ $DEGRADE ]; then
+        batch=$(( batch - 1 ))
+    fi
+
+    local queuefile="$WORKING_DIR/queued/$prior/$batch/$jname.job"
+    local failed="$WORKING_DIR/failed/$jname.job"
+    local runfile="$1"
+    local logfile="$WORKING_DIR/logs/$1.log"
+    local proc_id=$(echo $1|cut -d'-' -f3)
     echo killing $1 on $proc_id
     kill $proc_id 2>/dev/null
-    mv "$POOL_DIR/pools/$LOCAL_POOL/$runfile" "$queuefile"
-    rm $logfile
+
+    # Don't move back if we've exceeded our runtime
+    STOP=$(( $(date +%s)/60 ))
+    if [ $MAX_TIME ] && [ $(( START - STOP )) -gt $MAX_TIME ]; then
+        mv "$WORKING_DIR/pools/$LOCAL_POOL/$runfile" "$failed"
+    else 
+        mv "$WORKING_DIR/pools/$LOCAL_POOL/$runfile" "$queuefile"
+        rm $logfile
+    fi
     unlock_job $1
 }
 
@@ -148,39 +216,122 @@ _term(){
 trap _term SIGTERM SIGINT
 
 ###############################################################################
+# Argument Variable Declaration
+###############################################################################
+WORKING_DIR="$(pwd)"
+NPRIORS=9
+BATCHES=1
+BAT=1
+INIT_DIR=''
+LOCAL_POOL=''
+MAX_WORKERS=4
+MAX_TIME='' # minutes
+PRIORITY=4
+COMMAND=''
+DEGRADE=''
+
+###############################################################################
 # Argument Parsing
 ###############################################################################
-POOL_DIR="$(pwd)"
-if [[ $# -eq 1 ]]; then
-    POOL_DIR="$1"
-    exit 1
-fi
+while[[ $# -gt 0 ]];
+do
+key=$1
+case key in
+    -h|--help)
+        usage
+        exit 0
+    ;;
+    -i|--init)
+        INIT_DIR=0 
+        shift
+    ;;
+    -w|--working-directory)
+        WORKING_DIR="$2"
+        shift
+        shift
+    ;;
+    -b|--batches)
+        BATCHES="$2"
+        shift
+        shift
+    ;;
+    -B|--set-batch)
+        BAT="$2"
+        shift
+        shift
+    ;;
+    -p|--init-pool)
+        LOCAL_POOL="$2"
+        shift
+        shift
+    ;;
+    -n|--max-workers)
+        MAX_WORKERS="$2"
+        shift
+        shift
+    ;;
+    -t|--max-time)
+        MAX_TIME="$2"
+        shift
+        shift
+    ;;
+    -P|--priority)
+        PRIORITY="$2"
+        shift
+        shift
+    ;;
+    -a|--add)
+        COMMAND="$2"
+        shift
+        shift
+    ;;
+    -d|--degrade)
+        DEGRADE=0
+        shift
+    ;; 
+esac
 
 
 ###############################################################################
 # Argument & Directory Checking
 ###############################################################################
+if [ $INIT_DIR ]; then
+    setup_directory
+    check_dir
+else # we need to get some information about batches/priorities
+    NPRIORS=$(ls $WORKING_DIR/queued|wc -l) 
+    BATCHES=$(ls $WORKING_DIR/queued/1|wc -l)
+    check_dir
+fi
 
-setup_directory
-check_dir
-setup_localpool $$
+if [ $COMMAND ]; then
+    add_command "$COMMAND" 
+fi
 
-while [ $(get_njobs) -gt 0 ]; do
-    if [ $(get_poolsize) -lt 4 ]; then
-        next=$(next_job)
-        lock_job $next
-        if [ $? = 0 ]; then
-            echo "Starting job $next"
-            run_job $next & disown
+if [ $LOCAL_POOL]; then
+    setup_localpool $$
+
+    next=$(next_job)
+    jname=$(echo $next|cut -d'/' -f3)
+    batch=$(echo $next|cut -d'/' -f2)
+    prior=$(echo $next|cut -d'/' -f1)
+    while [ $next ]; do
+        if [ $(get_poolsize) -lt 4 ]; then
+            lock_job $next
+            if [ $? = 0 ]; then
+                echo "Starting job $next"
+                run_job $jname $batch $prior & disown
+            else
+                waittime=$(( (RANDOM % 5) ))
+                echo "Couldn't lock $next, waiting ${waittime}s..."
+                sleep $waittime
+            fi
         else
-            waittime=$(( (RANDOM % 5) ))
-            echo "Couldn't lock $next, waiting ${waittime}s..."
-            sleep $waittime
+            echo "Pool full waiting 5s..." 
+            sleep 5
         fi
-    else
-        echo "Pool full waiting 5s..." 
-        sleep 5
-    fi
-done
+        next=$(next_job)
+    done
 
-destroy_localpool
+    destroy_localpool
+fi
