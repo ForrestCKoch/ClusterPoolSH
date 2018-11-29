@@ -51,8 +51,9 @@ setup_localpool(){
 
 # tear down our pool
 destroy_localpool(){
-    for job in "$POOL_DIR/pools/$LOCAL_POOL/*.job"; do
+    for job in $(ls $POOL_DIR/pools/$LOCAL_POOL/*.job); do
         jid=$(echo $job|rev|cut -d'/' -f1|cut -d'.' -f2-|rev|cut -d'-' -f2-)
+        #echo killing $jid
         kill_job $jid
     done
     rmdir "$POOL_DIR/pools/$LOCAL_POOL"
@@ -100,6 +101,7 @@ run_job(){
         echo "Error: $queuefile not found!" >&2
     else
         #trap _term_worker SIGTERM SIGINT
+        trap _term SIGTERM SIGINT
         local runfile="$POOL_DIR/pools/$LOCAL_POOL/$BASHPID-$1.job"
         local logfile="$POOL_DIR/logs/$1.log"
         local endfile="$POOL_DIR/complete/$1.job"
@@ -122,7 +124,7 @@ kill_job(){
     local logfile="$POOL_DIR/logs/$1.log"
     proc_id=$(echo $runfile|rev|cut -d'/' -f1|rev|cut -d'-' -f1)
     echo killing $1 on $proc_id
-    kill $proc_id
+    kill $proc_id 2>/dev/null
     mv "$POOL_DIR/pools/$LOCAL_POOL/$runfile" "$queuefile"
     rm $logfile
     unlock_job $1
@@ -133,12 +135,11 @@ kill_job(){
 ###############################################################################
 _term(){
     if [ $BASHPID = $$ ]; then 
-        echo "Hello from termpool $BASHPID"
-        echo $(ps aux|grep cluster)
+        #echo "Hello from termpool $BASHPID"
         destroy_localpool
     else
-        echo "Hello from termworker $BASHPID, now killing $JPID"
-        kill $JPID
+        #echo "Hello from termworker $BASHPID, now killing $JPID"
+        kill $JPID 2>/dev/null
     fi
     echo "goodbye"
     exit 1
@@ -170,7 +171,7 @@ while [ $(get_njobs) -gt 0 ]; do
         lock_job $next
         if [ $? = 0 ]; then
             echo "Starting job $next"
-            run_job $next &
+            run_job $next & disown
         else
             waittime=$(( (RANDOM % 5) ))
             echo "Couldn't lock $next, waiting ${waittime}s..."
