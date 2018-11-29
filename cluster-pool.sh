@@ -11,17 +11,17 @@ usage(){
     echo "Usage: $0 [Options] 
     
     Options:
-    -h|--help                       Show this help message
-    -i|--init                       Initialize working directory 
-    -w|--workdir [PATH]             Set working directory path (Default: pwd)
-    -b|--batches [N]                Set number of batches (Default: 1)
-    -p|--init-pool [NAME]           Initialize new pool with name [NAME]
-    -n|--max-workers [N]            Set poolsize (Default: 4)
-    -t|--max-time [N]               Don't schedule jobs exceeding this time 
-    -a|--add \"COMMAND\" [NAME]       Add command to queue *NEEDS \"s
-    -B|--set-batch                  Set the batch for command (Default: 1) 
+    -h|--help                   Show this help message
+    -i|--init                   Initialize working directory 
+    -w|--workdir [PATH]         Set working directory path (Default: pwd)
+    -b|--batches [N]            Set number of batches (Default: 1)
+    -p|--init-pool [NAME]       Initialize new pool with name [NAME]
+    -n|--max-workers [N]        Set poolsize (Default: 4)
+    -t|--max-time [N]           Don't schedule jobs exceeding this time 
+    -a|--add \"COMMAND\" [NAME]   Add command to queue *NEEDS \"s
+    -B|--set-batch              Set the batch for command (Default: 1) 
     -P|--priority [1-$NPRIORS]         Set priority of job (Default 4)
-    -d|--degrade [y/n]          Degrade priority after reschedule (Default: y)
+    -d|--degrade                Degrade priority after reschedule
 ">&2
     #-r|--reschedule [y/n]       Whether to reschedule jobs (Default: y)     
 }
@@ -49,10 +49,10 @@ check_dir(){
     fi
     for i in $(seq 1 $NPRIORS); do
         for j in $(seq 1 $BATCHES); do
-        if [ ! -d "$WORKING_DIR/queued/$i/$j" ]; then
-            echo "Error: $WORKING_DIR is an invalid directory">&2
-            exit 1
-        fi
+            if [ ! -d "$WORKING_DIR/queued/$i/$j" ]; then
+                echo "Error: $WORKING_DIR is an invalid directory">&2
+                exit 1
+            fi
         done
     done
     for i in $(seq 1 $BATCHES); do
@@ -66,8 +66,11 @@ check_dir(){
 # setup $WORKING_DIR to be a valid working directory
 setup_directory(){
     mkdir -p "$WORKING_DIR/queued"
+    # Attempt to remove old baggage
+    rmdir $WORKDING_DIR/queued/*/* 2>/dev/null
+    rmdir $WORKDING_DIR/queued/* 2>/dev/null
     for i in $(seq 1 $NPRIORS); do 
-        for j in $(seq 1 $BATHCES); do
+        for j in $(seq 1 $BATCHES); do
             mkdir -p "$WORKING_DIR/queued/$i/$j"; 
         done
     done
@@ -233,10 +236,11 @@ DEGRADE=''
 ###############################################################################
 # Argument Parsing
 ###############################################################################
-while[[ $# -gt 0 ]];
+while [[ $# -gt 0 ]];
 do
-key=$1
-case key in
+key="$1"
+case $key in
+
     -h|--help)
         usage
         exit 0
@@ -290,7 +294,7 @@ case key in
         shift
     ;; 
 esac
-
+done
 
 ###############################################################################
 # Argument & Directory Checking
@@ -335,3 +339,4 @@ if [ $LOCAL_POOL]; then
 
     destroy_localpool
 fi
+
