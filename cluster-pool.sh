@@ -22,7 +22,7 @@ usage(){
     Pool Options:
     -p|--init-pool [NAME]       Initialize new pool with name [NAME]
     -n|--max-workers [N]        Set poolsize (Default: 4)
-    -t|--max-time [N]           Don't schedule jobs exceeding this time 
+    -t|--max-time [N]           Don't schedule jobs exceeding this time (m) 
     -d|--degrade                Degrade priority after reschedule
     
     Job Options: 
