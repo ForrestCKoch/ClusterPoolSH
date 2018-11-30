@@ -2,7 +2,36 @@
 
 ###############################################################################
 # ClusterPool.sh
-# TODO: Insert description & author details
+#
+# Author: Forrest Koch (forrest.c.koch@gmail.com)
+#
+# Description:
+#
+#       This script allows the user to initialize multiple pools of workers 
+#       drawing from a shared queue. It is intended to be used alongside 
+#       schedulers like SGE or PBS when the user needs to submit more jobs 
+#       than the queuing system will allow.
+#
+#       Pools will continue running jobs until receiving a SIGTERM or SIGINT 
+#       which is normally sent after a job exceeds it's walltime. Each running 
+#       job will then be terminated and reschuled.
+#
+# Notes on Usage:
+#
+# 
+#   -   Jobs should be divided into batches to prevent directories with too 
+#       many files.
+#
+#   -   Jobs and pool should be given unique identifiers -- behaviour is 
+#       undefined otherwise.
+#
+#   -   When adding a command to be run, remember to wrap it in quotes to pass 
+#       it as a single argument.
+#
+#   -   The degrade option will degrade the priority of a job each time it is 
+#       rescheduled. If priority is 9 before rescheduling, the job will not be 
+#       rescheduled.
+#
 ###############################################################################
 
 ###############################################################################
