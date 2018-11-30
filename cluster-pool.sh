@@ -343,7 +343,7 @@ if [ $LOCAL_POOL ]; then
             lock_job $jname
             if [ $? = 0 ]; then
                 echo "Starting job $next"
-                run_job $jname $batch $prior & disown
+                run_job $jname $batch $prior &
             else
                 waittime=$(( (RANDOM % 5) ))
                 echo "Couldn't lock $next, waiting ${waittime}s..."
@@ -358,7 +358,7 @@ if [ $LOCAL_POOL ]; then
         batch=$(echo $next|cut -d'/' -f2)
         prior=$(echo $next|cut -d'/' -f1)
     done
-
+    wait
     destroy_localpool
 fi
 
