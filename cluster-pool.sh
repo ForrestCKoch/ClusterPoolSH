@@ -223,12 +223,12 @@ kill_job(){
 _term(){
     if [ $BASHPID = $$ ]; then 
         #echo "Hello from termpool $BASHPID"
+        echo "Closing Pool $LOCAL_POOL"
         destroy_localpool
     else
         #echo "Hello from termworker $BASHPID, now killing $JPID"
         kill $JPID 2>/dev/null
     fi
-    echo "goodbye"
     exit 1
 }
 
@@ -359,7 +359,6 @@ if [ $LOCAL_POOL ]; then
         prior=$(echo $next|cut -d'/' -f1)
     done
 
-    echo 'hi'
     destroy_localpool
 fi
 
