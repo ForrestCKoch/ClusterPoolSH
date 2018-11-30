@@ -5,7 +5,7 @@ Forrest Koch (forrest.c.koch@gmail.com)
 ## Description:
 This script allows the user to initialize multiple pools of workers drawing from a shared queue.  It is intended to be used alongside schedulers like SGE or PBS when the user needs to submit more jobs than the queuing system will allow.  
 
-Pools will continue running jobs until receiving a `SIGTERM` or `SIGINT` which is normally sent after a job exceeds it's walltime.  Each running job will then be terminated and reschuled.
+Pools will continue running jobs until receiving a `SIGTERM` or `SIGINT` which is normally sent after a job exceeds it's walltime.  Each running job will then be terminated and rescheduled.
 
 ## Usage:
 ```
