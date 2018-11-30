@@ -103,6 +103,12 @@ check_dir(){
             exit 1
         fi    
     done
+    for i in $(seq 1 $BATCHES); do
+        if [ ! -d "$WORKING_DIR/logs/$i" ]; then
+            echo "Error: $WORKING_DIR is an invalid directory">&2
+            exit 1
+        fi    
+    done
 }
 
 # setup $WORKING_DIR to be a valid working directory
@@ -117,16 +123,15 @@ setup_directory(){
         done
     done
     mkdir -p "$WORKING_DIR/failed"
-    for i in $(seq 1 $BATCHES); do
-        mkdir -p "$WORKING_DIR/failed/$i" 
-    done
     mkdir -p "$WORKING_DIR/locks"
     mkdir -p "$WORKING_DIR/pools"
     mkdir -p "$WORKING_DIR/complete"
+    mkdir -p "$WORKING_DIR/logs"
     for i in $(seq 1 $BATCHES); do
         mkdir -p "$WORKING_DIR/complete/$i" 
+        mkdir -p "$WORKING_DIR/failed/$i" 
+        mkdir -p "$WORKING_DIR/logs/$i" 
     done
-    mkdir -p "$WORKING_DIR/logs"
 }
 
 # setup a pool
@@ -205,7 +210,7 @@ run_job(){
         trap _term SIGTERM SIGINT
         START=$(( $(date +%s)/60 ))
         local runfile="$WORKING_DIR/pools/$LOCAL_POOL/$3-$2-$START-$BASHPID-$1.job"
-        local logfile="$WORKING_DIR/logs/$1.log"
+        local logfile="$WORKING_DIR/logs/$2/$1.log"
         local endfile="$WORKING_DIR/complete/$2/$1.job"
         mv "$queuefile" "$runfile"
 
@@ -363,7 +368,7 @@ else # we need to get some information about batches/priorities
     check_dir
 fi
 
-echo $COMMAND
+#echo $COMMAND
 if [ "$COMMAND" ]; then
     add_command "$COMMAND" "$JNAME"
 fi
@@ -376,7 +381,7 @@ if [ $LOCAL_POOL ]; then
     batch=$(echo $next|cut -d'/' -f2)
     prior=$(echo $next|cut -d'/' -f1)
     while [ $next ]; do
-        if [ $(get_poolsize) -lt 4 ]; then
+        if [ $(get_poolsize) -lt $MAX_WORKERS ]; then
             lock_job $jname
             if [ $? = 0 ]; then
                 echo "Starting job $next"
