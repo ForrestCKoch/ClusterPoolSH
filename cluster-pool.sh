@@ -146,7 +146,7 @@ next_job(){
 # attempt to lock the job --
 # remeber to check the return status!
 lock_job(){
-    echo locking echo $1
+    echo "Attempting to lock job $1"
     mkdir "$WORKING_DIR/locks/$1.lock" 2>/dev/null
 }
 
