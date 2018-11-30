@@ -168,26 +168,28 @@ run_job(){
     else
         #trap _term_worker SIGTERM SIGINT
         trap _term SIGTERM SIGINT
-        local runfile="$WORKING_DIR/pools/$LOCAL_POOL/$3-$2-$BASHPID-$1.job"
+        START=$(( $(date +%s)/60 ))
+        local runfile="$WORKING_DIR/pools/$LOCAL_POOL/$3-$2-$START-$BASHPID-$1.job"
         local logfile="$WORKING_DIR/logs/$1.log"
         local endfile="$WORKING_DIR/complete/$2/$1.job"
         mv "$queuefile" "$runfile"
 
         # Start the job as a forked process, and record
         # the process in case we recieve a SIGTERM
-        START=$(( $(date +%s)/60 ))
         bash "$runfile" >> "$logfile" &
         JPID="$!"
         wait
         mv "$runfile" "$endfile"
+        unlock_job $1
     fi
 }
 
 # Kill the indicated job and return it to the queue
 # Note, it is up to the job to capture SIGTERM
 kill_job(){
-    local jname=$(echo $1|cut -d'-' -f4-)
+    local jname=$(echo $1|cut -d'-' -f5-)
     local batch=$(echo $1|cut -d'-' -f2)
+    local START=$(echo $1|cut -d'-' -f3)
     local prior=$(echo $1|cut -d'-' -f1)
 
     # degrade if necessary
@@ -199,14 +201,14 @@ kill_job(){
     local failed="$WORKING_DIR/failed/$batch/$jname.job"
     local runfile="$1.job"
     local logfile="$WORKING_DIR/logs/$jname.log"
-    local proc_id=$(echo $1|cut -d'-' -f3)
+    local proc_id=$(echo $1|cut -d'-' -f4)
     echo killing $1 on $proc_id
     kill $proc_id 2>/dev/null
 
     # Don't move back if we've exceeded our runtime
     # Or if we've exceeded priorities/attempts
     STOP=$(( $(date +%s)/60 ))
-    if [ $MAX_TIME ] && [ $(( START - STOP )) -gt $MAX_TIME ]; then
+    if [ $MAX_TIME ] && [ $(( STOP - START )) -gt $MAX_TIME ]; then
         mv "$WORKING_DIR/pools/$LOCAL_POOL/$runfile" "$failed"
     elif [ $prior -gt $NPRIORS ]; then
         mv "$WORKING_DIR/pools/$LOCAL_POOL/$runfile" "$failed"
