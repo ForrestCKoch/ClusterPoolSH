@@ -13,16 +13,22 @@ usage(){
     
     Options:
     -h|--help                   Show this help message
+
+    Working Directory Options:
     -i|--init                   Initialize working directory 
     -w|--workdir [PATH]         Set working directory path (Default: pwd)
     -b|--batches [N]            Set number of batches (Default: 1)
+    
+    Pool Options:
     -p|--init-pool [NAME]       Initialize new pool with name [NAME]
     -n|--max-workers [N]        Set poolsize (Default: 4)
     -t|--max-time [N]           Don't schedule jobs exceeding this time 
+    -d|--degrade                Degrade priority after reschedule
+    
+    Job Options: 
     -a|--add \"COMMAND\" [NAME]   Add command to queue *NEEDS \"s
     -B|--set-batch              Set the batch for command (Default: 1) 
     -P|--priority [1-$NPRIORS]         Set priority of job (Default 4)
-    -d|--degrade                Degrade priority after reschedule
 ">&2
     #-r|--reschedule [y/n]       Whether to reschedule jobs (Default: y)     
 }
