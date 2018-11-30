@@ -1,4 +1,5 @@
 #!/bin/bash
+
 ###############################################################################
 # ClusterPool.sh
 # TODO: Insert description & author details
@@ -96,14 +97,17 @@ setup_directory(){
 # setup a pool
 setup_localpool(){
     if  mkdir "$WORKING_DIR/pools/$1" ; then
-        LOCAL_POOL=$1
+        #LOCAL_POOL=$1
+        return
     else
         echo "Error: Couldn't create pool $1" >&2
+        exit 1
     fi
 }
 
 # tear down our pool
 destroy_localpool(){
+    echo 'hi'
     for job in $(ls $WORKING_DIR/pools/$LOCAL_POOL/*.job); do
         fname=$(echo $job|rev|cut -d'/' -f1|cut -d'.' -f2-|rev)
         kill_job $fname
@@ -123,14 +127,14 @@ get_poolsize(){
 add_command(){
     local name="$2"
     local command_string="$1"
-    echo "$command_string" > "$WORKING_DIR/$PRIORITY/$BAT/$name.job"
+    echo "$command_string" > "$WORKING_DIR/queued/$PRIORITY/$BAT/$name.job"
 }
 
 # return the next job to be run
 next_job(){
     for p in $(seq 1 $NPRIORS); do
         for b in $(seq 1 $BATCHES); do
-            local head_job=$(ls $WORKING_DIR/queued/$p/$b/*|head -n1 2>/dev/null)
+            local head_job=$(ls $WORKING_DIR/queued/$p/$b/* 2>/dev/null|head -n1)
             if [ $head_job ]; then
                 echo $head_job|rev|cut -d'/' -f1-3|rev
                 return
@@ -142,6 +146,7 @@ next_job(){
 # attempt to lock the job --
 # remeber to check the return status!
 lock_job(){
+    echo locking echo $1
     mkdir "$WORKING_DIR/locks/$1.lock" 2>/dev/null
 }
 
@@ -192,8 +197,8 @@ kill_job(){
 
     local queuefile="$WORKING_DIR/queued/$prior/$batch/$jname.job"
     local failed="$WORKING_DIR/failed/$batch/$jname.job"
-    local runfile="$1"
-    local logfile="$WORKING_DIR/logs/$1.log"
+    local runfile="$1.job"
+    local logfile="$WORKING_DIR/logs/$jname.log"
     local proc_id=$(echo $1|cut -d'-' -f3)
     echo killing $1 on $proc_id
     kill $proc_id 2>/dev/null
@@ -209,7 +214,7 @@ kill_job(){
         mv "$WORKING_DIR/pools/$LOCAL_POOL/$runfile" "$queuefile"
         rm $logfile
     fi
-    unlock_job $1
+    unlock_job $jname
 }
 
 ###############################################################################
@@ -297,6 +302,8 @@ case $key in
     ;;
     -a|--add)
         COMMAND="$2"
+        JNAME="$3"
+        shift
         shift
         shift
     ;;
@@ -319,20 +326,21 @@ else # we need to get some information about batches/priorities
     check_dir
 fi
 
-if [ $COMMAND ]; then
-    add_command "$COMMAND" 
+echo $COMMAND
+if [ "$COMMAND" ]; then
+    add_command "$COMMAND" "$JNAME"
 fi
 
-if [ $LOCAL_POOL]; then
-    setup_localpool $$
+if [ $LOCAL_POOL ]; then
+    setup_localpool "$LOCAL_POOL"
 
     next=$(next_job)
-    jname=$(echo $next|cut -d'/' -f3)
+    jname=$(echo $next|cut -d'/' -f3|rev|cut -d'.' -f2-|rev)
     batch=$(echo $next|cut -d'/' -f2)
     prior=$(echo $next|cut -d'/' -f1)
     while [ $next ]; do
         if [ $(get_poolsize) -lt 4 ]; then
-            lock_job $next
+            lock_job $jname
             if [ $? = 0 ]; then
                 echo "Starting job $next"
                 run_job $jname $batch $prior & disown
@@ -346,8 +354,12 @@ if [ $LOCAL_POOL]; then
             sleep 5
         fi
         next=$(next_job)
+        jname=$(echo $next|cut -d'/' -f3|rev|cut -d'.' -f2-|rev)
+        batch=$(echo $next|cut -d'/' -f2)
+        prior=$(echo $next|cut -d'/' -f1)
     done
 
+    echo 'hi'
     destroy_localpool
 fi
 
