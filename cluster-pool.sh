@@ -240,7 +240,7 @@ kill_job(){
     local queuefile="$WORKING_DIR/queued/$prior/$batch/$jname.job"
     local failed="$WORKING_DIR/failed/$batch/$jname.job"
     local runfile="$1.job"
-    local logfile="$WORKING_DIR/logs/$jname.log"
+    local logfile="$WORKING_DIR/logs/$batch/$jname.log"
     local proc_id=$(echo $1|cut -d'-' -f4)
     echo killing $1 on $proc_id
     kill $proc_id 2>/dev/null
@@ -353,6 +353,10 @@ case $key in
         DEGRADE=0
         shift
     ;; 
+    -c|--check)
+        check_dir
+        exit
+    ;;
 esac
 done
 
